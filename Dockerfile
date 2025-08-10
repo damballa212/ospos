@@ -1,34 +1,41 @@
-FROM php:8.1-apache
+services:
+  ospos:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - MYSQL_HOST=db
+      - MYSQL_DATABASE=ospos
+      - MYSQL_USER=ospos
+      - MYSQL_PASSWORD=marlon212
+      - ENCRYPTION_KEY=V4rK8pQ2tN6yM1zR5xC7bL9dF3hJ7sK2
+      - TZ=America/Caracas
+    depends_on:
+      - db
+    expose:
+      - "80"
+    volumes:
+      - ospos_uploads:/var/www/html/public/uploads
+      - ospos_logs:/var/www/html/application/logs
 
-# Paquetes y extensiones PHP necesarias
-RUN apt-get update && apt-get install -y \
-    git unzip libicu-dev libpng-dev libzip-dev zlib1g-dev libjpeg-dev libfreetype6-dev libonig-dev libxml2-dev \
- && docker-php-ext-configure gd --with-freetype --with-jpeg \
- && docker-php-ext-install intl gd zip mbstring bcmath pdo_mysql mysqli \
- && a2enmod rewrite headers \
- && rm -rf /var/lib/apt/lists/*
+  db:
+    image: mariadb:10.6
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=marlon212
+      - MYSQL_DATABASE=ospos
+      - MYSQL_USER=ospos
+      - MYSQL_PASSWORD=marlon212
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - ospos_db:/var/lib/mysql
 
-# Instalar Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-# Webroot = /public
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf && \
-    sed -ri -e 's!<Directory /var/www/>!<Directory ${APACHE_DOCUMENT_ROOT}/>!g' /etc/apache2/apache2.conf && \
-    sed -ri -e 's!<Directory /var/www/html/>!<Directory ${APACHE_DOCUMENT_ROOT}/>!g' /etc/apache2/apache2.conf
-
-WORKDIR /var/www/html
-
-# Descargar OSPOS y preparar permisos
-RUN git clone --depth 1 https://github.com/opensourcepos/opensourcepos.git . \
- && composer install --no-dev --optimize-autoloader \
- && mkdir -p application/logs public/uploads \
- && chown -R www-data:www-data application public \
- && chmod -R 775 application/logs public/uploads
-
-# EntryPoint que inyecta DB y encryption_key
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-EXPOSE 80
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+volumes:
+  ospos_db:
+  ospos_uploads:
+  ospos_logs:

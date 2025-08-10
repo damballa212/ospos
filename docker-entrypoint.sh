@@ -7,7 +7,7 @@ set -e
 : "${MYSQL_PASSWORD:?Missing MYSQL_PASSWORD}"
 : "${ENCRYPTION_KEY:?Missing ENCRYPTION_KEY}"
 
-# database.php desde variables
+# Generar application/config/database.php
 cat > application/config/database.php <<'PHP'
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
@@ -48,7 +48,7 @@ if($c!==false){
 }
 '
 
-# Permisos (por si los volúmenes los cambian)
+# Permisos por si volúmenes cambian ownership
 chown -R www-data:www-data application public
 chmod -R 775 application/logs public/uploads || true
 

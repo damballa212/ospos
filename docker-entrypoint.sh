@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# --- Asegurar ruta de trabajo ---
+# --- Ruta de trabajo ---
 cd /var/www/html || { echo "No existe /var/www/html"; exit 1; }
 
-# Crear carpetas requeridas
+# --- Estructura necesaria ---
 mkdir -p application/config application/logs public/uploads
 
-# --- Validar variables ---
+# --- Variables requeridas ---
 : "${MYSQL_HOST:?Missing MYSQL_HOST}"
 : "${MYSQL_DATABASE:?Missing MYSQL_DATABASE}"
 : "${MYSQL_USER:?Missing MYSQL_USER}"
@@ -43,16 +43,25 @@ $db['default'] = array(
 );
 PHP
 
-# --- Inyectar encryption_key ---
-php -r '
-$f="application/config/config.php";
-$c=file_get_contents($f);
-$k=getenv("ENCRYPTION_KEY");
-if($c===false){fwrite(STDERR,"No se pudo leer $f\n"); exit(1);}
-$c=preg_replace("/\\$config\\[[\"\\\']encryption_key[\"\\\']\\]\\s*=\\s*[\"\\\'].*?[\"\\\'];/",
-  "\$config[\"encryption_key\"]=\"".$k."\";", $c, 1);
-file_put_contents($f,$c);
-'
+# --- Inyectar encryption_key (sin pelear con comillas) ---
+cat > /tmp/setkey.php <<'PHP'
+<?php
+$f = "application/config/config.php";
+$c = file_get_contents($f);
+if ($c === false) { fwrite(STDERR, "No se pudo leer $f\n"); exit(1); }
+$k = getenv("ENCRYPTION_KEY");
+
+// Reemplaza la línea de la clave (comillas simples) si existe; si no, la agrega.
+if (preg_match("/\\\$config\\['encryption_key'\\]\\s*=\\s*'.*?';/", $c)) {
+  $c = preg_replace("/\\\$config\\['encryption_key'\\]\\s*=\\s*'.*?';/",
+                   "\$config['encryption_key']='" . addslashes($k) . "';", $c, 1);
+} else {
+  $c = str_replace("\$config['base_url'] = '';", "\$config['base_url'] = '';\n\$config['encryption_key']='" . addslashes($k) . "';", $c);
+}
+file_put_contents($f, $c);
+PHP
+
+php /tmp/setkey.php
 
 # --- Permisos ---
 chown -R www-data:www-data application public
